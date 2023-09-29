@@ -15,11 +15,9 @@ from plotly.subplots import make_subplots
 import requests 
 import pandas as pd
 from datetime import date, datetime, timedelta, time
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
-API = os.getenv("MY_API_KEY")
+
+API = api_key = st.secrets["API_KEY"]
 deflaut_date = date.today() - timedelta(100)
 min_date =  date.today() - timedelta(365)
 max_date =  date.today()- timedelta(1)
