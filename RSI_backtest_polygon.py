@@ -243,9 +243,7 @@ if len(trade_result_log) > 0:
             st.metric(
                 "總勝/敗率",
                 f"{win_loss_ratiio:.2f}")
-            st.metric(
-                "交易持有期（天）",
-                f"{testing_period:.1f}")     
+
         with col3:
             st.metric(
             "風險/報酬比率",
