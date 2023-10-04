@@ -15,6 +15,9 @@ from plotly.subplots import make_subplots
 import requests 
 import pandas as pd
 from datetime import date, datetime, timedelta, time
+import time
+
+
 
 
 API = api_key = st.secrets["API_KEY"]
@@ -32,30 +35,42 @@ def drawndown(trade_result_log):
     return list_drawn_down
 
 
-def get_data(symbol, end_date, day_range, interval = 15):
-  url = "https://api.polygon.io/v2/"
-  symbol = symbol.upper()
+def get_data(symbol, end_date, start_date, interval=15):
+    url = "https://api.polygon.io/v2/"
+    symbol = symbol.upper()
+    time_frame = "minute"
+    limit = 50000
+    sort = "desc"
+    all_data = []  # Initialize an empty list to store all data
 
-  time_frame = "minute"
-  limit = 40000
-  sort = "desc"
 
-  end_time = datetime.combine(end_date, datetime.min.time()) # combin to timestamp object
-  start_time = end_time - timedelta(days = day_range)
+    # Loop to fetch data in 2-month intervals
+    while start_date <= end_date:
+        next_month_start = start_date + timedelta(days=60)  # 2 months later
+        fetch_end_date = min(next_month_start - timedelta(days=1), end_date)
 
-  print(f"Downloading {start_time} to {end_time} {symbol} Data")
+        print(f"Downloading {start_date.strftime('%Y-%m-%d')} to {fetch_end_date.strftime('%Y-%m-%d')} {symbol} Data")
 
-  start_time = int(start_time.timestamp() * 1000) # convert to ms
-  end_time = int(end_time.timestamp() * 1000)  
+        # Create the request URL
+        request_url = f"{url}aggs/ticker/{symbol}/range/{interval}/{time_frame}/{start_date.strftime('%Y-%m-%d')}/{fetch_end_date.strftime('%Y-%m-%d')}?adjusted=true&sort={sort}&limit={limit}&apiKey={API}"
+        data = requests.get(request_url).json()
 
-  request_url = f"{url}aggs/ticker/{symbol}/range/{interval}/{time_frame}/{start_time}/{end_time}?adjusted=true&sort={sort}&limit={limit}&apiKey={API}"
+        if "results" in data:
+            all_data.extend(data["results"])
 
-  data = requests.get(request_url).json()
-  if "results" in data: 
-    return data["results"]
-  else: 
-    print("no data")
-    pass 
+        # Update start_date for next iteration
+        start_date = next_month_start
+
+        # Wait for 15 seconds before the next API call
+        # time.sleep(15)
+
+    if len(all_data) == 0:
+        print("No data")
+        return None
+
+    return all_data
+
+
 
 ### Streamlit ###
 
@@ -78,16 +93,15 @@ elif time_interval_select == "4小時":
     time_interval = 240 
 
 
-start_date_input = st.sidebar.date_input("開始日期（此版本最長為1年）", value=deflaut_date, min_value = min_date, max_value=max_date)
+start_date = st.sidebar.date_input("開始日期（此版本最長為1年）", value=deflaut_date, min_value = min_date, max_value=max_date)
 rsi_length = st.sidebar.slider("RSI Length", min_value=1, max_value=30, value=14)
 
 
 interval = int(time_interval)
 end_date = date.today()
-start_date = start_date_input
-day_range = (end_date - start_date).days #datatime to days
+# day_range = (end_date - start_date).days #datatime to days
 list_bars, bar = [],[]
-list_bars = get_data(ticker, end_date, day_range, interval =interval)
+list_bars = get_data(ticker, end_date, start_date, interval =interval)
 
 
 df = pd.DataFrame(list_bars)
@@ -96,13 +110,18 @@ df.set_index("datetime", inplace=True)
 df = df [["o","h","l","c","v","n"]]
 df.columns = ["Open","High","Low","Close","Volume","Transaction"]
     
-    # #convert Time zone to E.T time 
-    # eastern = pytz.timezone('US/Eastern')
-    # df.index = df.index.tz_localize(pytz.utc).tz_convert(eastern)
+# #convert Time zone to E.T time 
+df.index = df.index.tz_localize('UTC').tz_convert('US/Eastern')
+
+# Filter data to only include trading hours (9:30 AM to 4:00 PM)
+df = df.between_time('09:30', '16:00')
 
 df.sort_index(ascending=True, inplace=True)
 df["rsi"] = ta.rsi(df.Close, length=rsi_length)
 df.dropna(inplace=True)
+
+
+
 st.write(f"從 {start_date} 到 {end_date} 的測試數據，總共有 {len(df)} 行數據")
 with st.expander("點擊以展開", expanded=False):
     st.write(f"總共有 {len(df)} 行數據")
@@ -207,7 +226,7 @@ if len(trade_result_log) > 0:
         risk_reward_ratio = 0
     max_dawndown = min(drawndown(trade_result_log))*100
 
-    tab1, tab2, tab3, tab4 = st.tabs(["統計資料", "股票圖表", "交易結果日誌", "信號日誌"])
+    tab1, tab2, tab3 = st.tabs(["統計資料", "股票圖表", "交易結果日誌"])
 
 
     with tab1:
@@ -288,9 +307,13 @@ if len(trade_result_log) > 0:
 
     with tab3:
         st.dataframe(trade_result_log) 
-    with tab4:
-        rsi_result = pd.concat([df, trade_result_log ], axis = 1)
-        st.dataframe(rsi_result) 
+        st.download_button(
+        label="Download trade result log",
+        data=pd.DataFrame(trade_result_log).to_csv(index=True),
+        file_name='trade_result_log.csv',
+        mime='text/csv',
+        )
+
 else:
     st.write("沒有交易訊號")
     st.stop()
@@ -308,3 +331,4 @@ with st.expander("免責聲明", expanded=False):
     使用或依賴本應用程式內容即表示您接受本免責聲明的所有條款和條件。如果您不同意這些條款，請不要使用或依賴本應用程式或其內容。
     </small>
     """, unsafe_allow_html=True)
+
