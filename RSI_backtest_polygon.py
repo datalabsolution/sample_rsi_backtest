@@ -20,7 +20,7 @@ import time
 
 
 
-API = api_key = st.secrets["API_KEY"]
+API = api_key = "AI73Oy1KnUYUfHAKsOJLxSmVz9dWFC95"
 deflaut_date = date.today() - timedelta(100)
 min_date =  date.today() - timedelta(365)
 max_date =  date.today()- timedelta(1)
